@@ -3,6 +3,7 @@ const validator = require('validator')
 
 const mongoose = require('../db/mongoose')
 const User = require('../models/user')
+const auth = require('../middleware/auth')
 
 const router = new express.Router()
 
@@ -39,7 +40,9 @@ router.post('/users', (req,res) => {
             return;
         }
         user.save().then(() => {
-            res.status(201).send({message:"User successfully inserted!",data:user})
+            user.generateAuthToken().then((token) => {
+                res.status(201).send({message:"User successfully inserted!",data:user,token:token})
+            })
         }).catch((err) => {
             res.status(400).send(err)
         })
@@ -47,24 +50,61 @@ router.post('/users', (req,res) => {
 
 })
 
-router.get('/users/email=:email&password=:password',(req,res) => {
-    const email = req.params.email
-    const password = req.params.password
+router.post('/users/login',(req,res) => {
     
-    User.findOne({email:email,password:password}).then((user) => {
+    console.log("Incoming POST req for login user")
+    const email = req.body.email
+    const password = req.body.password
+     
+    User.findByCredentials(email,password).then((user) => {
         if(!user){
-            return res.status(404).send({error:"Incorrect email or password!"})
+            return res.status(404).send({error:"Unable to login"})
         }
-        res.send({data:user})
+        user.generateAuthToken().then((token) => {
+            res.send({message:"User successfully Logged In",data:user,token:token})
+        })
     }).catch((err) => {
-        res.status(500).send(err);
+        res.status(400).send({error:"Unable to login"});
     })
 })
 
-router.get('/users',(req,res) => {
+router.post('/users/logout',auth,async (req,res) => {
+    console.log("Incoming POST req for logout user")
+    try{
+        req.user.tokens = req.user.tokens.filter((token) => {
+            return token.token !== req.token
+        })
+        await req.user.save()
+
+        res.send({message:"user logged out successfully"})
+    }
+    catch(e){
+        res.status(500).send()
+    }
+})
+
+router.post('/users/logoutAll',auth,async (req,res) => {
+    console.log("Incoming POST req for logout user from all devices")
+    try{
+        req.user.tokens = []
+        await req.user.save()
+
+        res.send({message:"user logged out from all devices successfully"})
+    }
+    catch(e){
+        res.status(500).send()
+    }
+})
+
+router.get('/users/myProfile',auth,(req,res) => {
     
-    console.log("Incoming GET request for all users")
-    
+    console.log("Incoming GET request for profile")
+    res.send(req.user)
+})
+
+router.get('/users',auth,(req,res) => {
+    console.log("Incoming GET request for all users")  
+  
     User.find({}).then((users) => {
         res.send({data:users})
     }).catch((err) => {
@@ -72,7 +112,7 @@ router.get('/users',(req,res) => {
     })
 })
 
-router.get('/users/:id',(req,res) => {
+router.get('/users/:id',auth,(req,res) => {
     
     console.log("Incoming GET request for a user")
     const _id = req.params.id;
@@ -91,8 +131,29 @@ router.get('/users/:id',(req,res) => {
     })
 })
 
+router.patch('/users/me',auth,async (req,res) => {
 
-router.patch('/users/:id',(req,res) => {
+    console.log("Incoming PATCH request for updating user profile")
+
+    const updates = Object.keys(req.body)
+    const allowedUpdates = ['name','email','password','mobile']
+    const isValidOperation = updates.every((update) => allowedUpdates.includes(update))
+
+    if(!isValidOperation){
+        return res.status(400).send({error:"Invalid update!"})
+    }
+
+    try {
+        updates.forEach((update) => req.user[update] = req.body[update])  
+        await req.user.save()
+        res.send({message:"User successfully updated",data:req.user})
+    }catch(e) {
+        res.status(400).send({error:"Invalid data!"})
+    }
+
+})
+
+router.patch('/users/:id',auth,(req,res) => {
 
     console.log("Incoming PATCH request for a user")
     const _id = req.params.id;
@@ -102,18 +163,42 @@ router.patch('/users/:id',(req,res) => {
         return;
     }
 
-    User.findByIdAndUpdate(_id,req.body,{new:true,runValidators:true})
-        .then((user) => {
+    const updates = Object.keys(req.body)
+    const allowedUpdates = ['name','email','password','mobile']
+    const isValidOperation = updates.every((update) => allowedUpdates.includes(update))
+
+    if(!isValidOperation){
+        return res.status(400).send({error:"Invalid update!"})
+    }
+
+    User.findById(_id).then((user) => { 
             if(!user){
                 return res.status(404).send({error:"User not found!"})
             }
-            res.send({data:user})
+            updates.forEach((update) => user[update] = req.body[update])  
+            user.save().then((user) => {
+                res.send({message:"User successfully updated",data:user})
+            })
         }).catch((err) => {
             res.status(400).send({error:"Invalid data!"})
         })
+
 })
 
-router.delete('/users/:id',(req,res) => {
+router.delete('/users/me',auth, async(req,res) => {
+    console.log("Incoming DELETE request for a current user")
+
+    try {
+        await req.user.remove()
+        res.send({message:"User deleted successfully",data:req.user})
+    }catch(e){
+        res.status(500).send(e)
+    }
+
+})
+
+router.delete('/users/:id',auth,(req,res) => {
+  
     console.log("Incoming DELETE request for a user")
     const _id = req.params.id;
 
@@ -126,7 +211,7 @@ router.delete('/users/:id',(req,res) => {
         if(!user){
             res.status(404).send({error:"User not found!"})
         }
-        res.send(user)
+        res.send({message:"User deleted successfully",data:user})
     }).catch((err) => {
         res.status(500).send(err)
     })
