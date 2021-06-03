@@ -104,6 +104,7 @@ router.get('/users/myProfile',auth,(req,res) => {
 
 router.get('/users',auth,(req,res) => {
     console.log("Incoming GET request for all users")  
+  
     User.find({}).then((users) => {
         res.send({data:users})
     }).catch((err) => {
@@ -197,6 +198,7 @@ router.delete('/users/me',auth, async(req,res) => {
 })
 
 router.delete('/users/:id',auth,(req,res) => {
+  
     console.log("Incoming DELETE request for a user")
     const _id = req.params.id;
 
@@ -215,6 +217,5 @@ router.delete('/users/:id',auth,(req,res) => {
     })
 
 })
-
 
 module.exports = router
