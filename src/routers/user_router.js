@@ -1,5 +1,7 @@
 const express = require('express')
 const validator = require('validator')
+const multer = require('multer')
+const sharp = require('sharp')
 
 const mongoose = require('../db/mongoose')
 const User = require('../models/user')
@@ -216,6 +218,53 @@ router.delete('/users/:id',auth,(req,res) => {
         res.status(500).send(err)
     })
 
+})
+
+const upload = multer({
+    limits:{
+        fileSize:1000000
+    },
+    fileFilter(req,file,cb){
+        if(!file.originalname.match(/\.(jpg|jpeg|png)$/)){
+            return cb(new Error('Please an upload image'))
+        }
+        cb(undefined,true)
+    }
+})
+
+router.post('/users/me/avatar',auth,upload.single('avatar'), async(req,res) => {
+    console.log("Incoming POST request for uploading user avatar")
+   
+    const buffer = await sharp(req.file.buffer).resize({width:250,height:250}).png().toBuffer()
+
+    req.user.avatar = buffer
+    await req.user.save()
+    res.send({message:"Avatar uploaded successfully"})
+},(error,req,res,next) => {
+    res.status(400).send({error:error.message})
+})
+
+router.get('/users/:id/avatar',async (req,res) => {
+    console.log("Incoming GET request for getting avatar of user")
+    try {
+        const user = await User.findById(req.params.id)
+
+        if(!user || !user.avatar) {
+            throw new Error()
+        }
+
+        res.set('Content-Type','image/png')
+        res.send(user.avatar)
+    } catch(e) {
+        res.status(404).send({error:"Image not found"})
+    }
+})
+
+router.delete('/users/me/avatar',auth,async (req,res) => {
+    console.log("Incoming DELETE request for deleting user avatar")
+    req.user.avatar = undefined
+    await req.user.save()
+    res.send({message:"Avatar deleted successfully"})
 })
 
 module.exports = router
