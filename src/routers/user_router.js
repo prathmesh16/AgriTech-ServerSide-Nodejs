@@ -244,7 +244,7 @@ router.post('/users/me/avatar',auth,upload.single('avatar'), async(req,res) => {
     res.status(400).send({error:error.message})
 })
 
-router.get('/users/:id/avatar',async (req,res) => {
+router.get('/users/:id/avatar',auth,async (req,res) => {
     console.log("Incoming GET request for getting avatar of user")
     try {
         const user = await User.findById(req.params.id)
