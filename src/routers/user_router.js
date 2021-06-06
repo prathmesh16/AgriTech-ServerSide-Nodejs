@@ -101,7 +101,7 @@ router.post('/users/logoutAll',auth,async (req,res) => {
 router.get('/users/myProfile',auth,(req,res) => {
     
     console.log("Incoming GET request for profile")
-    res.send(req.user)
+    res.send({data:req.user})
 })
 
 router.get('/users',auth,(req,res) => {
